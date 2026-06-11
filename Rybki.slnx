@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="Rybki/Rybki.vcxproj" Id="f2dcee7a-ceb8-4852-9b81-6e6462d77ccc" />
+</Solution>

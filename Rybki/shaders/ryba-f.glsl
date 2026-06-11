@@ -1,0 +1,62 @@
+#version 330 core
+out vec4 FragColor;
+
+in vec2 TexCoords;
+in vec3 Normal;
+in vec3 FragPos;
+
+uniform sampler2D texture_diffuse1;
+
+layout (std140) uniform LightBlock {
+    vec3 position;
+    float cutOff;
+    vec3 direction;
+    float outerCutOff;
+    vec3 color;
+    float constant;
+    float linear;
+    float quadratic;
+} spotLight;
+
+layout (std140) uniform ChestLightBlock {
+    vec3  position;
+    float intensity;
+    vec3  color;
+    float pad;
+} chestLight;
+
+vec3 calculateChestGlow(vec3 normal, vec3 fragPos) {
+    vec3  dir         = normalize(chestLight.position - fragPos);
+    float dist        = length(chestLight.position - fragPos);
+    float attenuation = 1.0 / (1.0 + 0.8 * dist + 3.0 * dist * dist);
+    float diff        = max(dot(normal, dir), 0.0);
+    return chestLight.color * diff * attenuation * chestLight.intensity * 3.0;
+}
+
+void main() {    
+    vec4 texColor = texture(texture_diffuse1, TexCoords);
+    if(texColor.a < 0.1) discard; // Odrzucenie przezroczystych pikseli
+
+    vec3 norm = normalize(Normal);
+    vec3 lightDir = normalize(spotLight.position - FragPos);
+    
+    // Światło owijające się wokół ryby, żeby boki nie były czarne
+    float diff = dot(norm, lightDir) * 0.5 + 0.5;
+    
+    // Obliczenie krawędzi stożka (miękkie światło)
+    float theta = dot(lightDir, normalize(-spotLight.direction)); 
+    float epsilon = spotLight.cutOff - spotLight.outerCutOff;
+    float intensity = clamp((theta - spotLight.outerCutOff) / epsilon, 0.0, 1.0);
+    
+    // Tłumienie z odległością (attenuation)
+    float distance = length(spotLight.position - FragPos);
+    float attenuation = 1.0 / (spotLight.constant + spotLight.linear * distance + spotLight.quadratic * (distance * distance));    
+
+    vec3 diffuse = spotLight.color * diff * intensity * attenuation;
+    vec3 ambient = vec3(0.2) * texColor.rgb; // Delikatne światło otoczenia
+    
+    vec3 result = ambient + (diffuse * texColor.rgb);
+    
+    FragColor = vec4(result, texColor.a);
+    FragColor += calculateChestGlow(norm, FragPos);
+}
