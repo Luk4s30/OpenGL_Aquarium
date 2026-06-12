@@ -58,7 +58,6 @@ void main() {
     vec3 norm = normalize(Normal);
     vec3 viewDir = normalize(viewPos - FragPos);
 
-    // ↓ wywołanie bez przekazywania struktury
     vec3 lighting = calculateSpotLight(norm, FragPos, viewDir);
     vec3 ambient = vec3(0.05) * baseColor.rgb;
     vec3 finalColor = ambient + lighting;

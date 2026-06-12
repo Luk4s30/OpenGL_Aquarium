@@ -65,7 +65,6 @@ void main() {
     vec3 norm = normalize(Normal);
     bool isTopSurface = (isTopFace > 0.5);
     
-    // Obliczamy fale tylko dla górnej tafli
     if (isTopSurface) {
         float wave1 = sin((FragPos.x + FragPos.z) * 8.0 + time * 3.0);
         float wave2 = cos((FragPos.x - FragPos.z) * 6.0 - time * 2.0);
@@ -87,7 +86,6 @@ void main() {
     float finalAlpha = isTopSurface ? 1.0 : 0.08; 
 
     if (isTopSurface) {
-        // Pobieramy koordynaty ekranu
         vec2 screenUV = gl_FragCoord.xy / resolution;
         
         // Zniekształcenie UV

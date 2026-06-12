@@ -28,10 +28,10 @@ public:
 
     void ProcessKeyboard(int direction, float deltaTime) {
         float velocity = MovementSpeed * deltaTime;
-        if (direction == 0) Position += Front * velocity; // W
-        if (direction == 1) Position -= Front * velocity; // S
-        if (direction == 2) Position -= Right * velocity; // A
-        if (direction == 3) Position += Right * velocity; // D
+        if (direction == 0) Position += Front * velocity;
+        if (direction == 1) Position -= Front * velocity;
+        if (direction == 2) Position -= Right * velocity;
+        if (direction == 3) Position += Right * velocity;
     }
 
     void ProcessMouseMovement(float xoffset, float yoffset) {

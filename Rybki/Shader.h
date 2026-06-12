@@ -38,18 +38,18 @@ public:
         vertex = glCreateShader(GL_VERTEX_SHADER);
         glShaderSource(vertex, 1, &vShaderCode, NULL);
         glCompileShader(vertex);
-        checkCompileErrors(vertex, vertexPath);   // ← DODAJ
+        checkCompileErrors(vertex, vertexPath);
 
         fragment = glCreateShader(GL_FRAGMENT_SHADER);
         glShaderSource(fragment, 1, &fShaderCode, NULL);
         glCompileShader(fragment);
-        checkCompileErrors(fragment, fragmentPath); // ← DODAJ
+        checkCompileErrors(fragment, fragmentPath);
 
         ID = glCreateProgram();
         glAttachShader(ID, vertex);
         glAttachShader(ID, fragment);
         glLinkProgram(ID);
-        checkLinkErrors(ID, vertexPath);           // ← DODAJ
+        checkLinkErrors(ID, vertexPath);
 
         glDeleteShader(vertex);
         glDeleteShader(fragment);
@@ -99,7 +99,7 @@ private:
         glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
         if (!success) {
             glGetShaderInfoLog(shader, 1024, NULL, infoLog);
-            std::cerr << "\n=== SHADER COMPILE ERROR: " << path << " ===\n"
+            std::cerr << "\nSHADER COMPILE ERROR: " << path << " ===\n"
                 << infoLog << "\n";
         }
     }
@@ -110,7 +110,7 @@ private:
         glGetProgramiv(program, GL_LINK_STATUS, &success);
         if (!success) {
             glGetProgramInfoLog(program, 1024, NULL, infoLog);
-            std::cerr << "\n=== PROGRAM LINK ERROR: " << name << " ===\n"
+            std::cerr << "\nPROGRAM LINK ERROR: " << name << " ===\n"
                 << infoLog << "\n";
         }
     }

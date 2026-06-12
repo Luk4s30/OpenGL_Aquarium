@@ -11,25 +11,22 @@ uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
 uniform float time;
-uniform float randomOffset; // <--- Odbieramy nasz losowy offset z C++
+uniform float randomOffset;
 
 void main() {
     vec4 worldPos = model * vec4(aPos, 1.0);
     float heightFromBottom = max(worldPos.y - (-1.1), 0.0);
     float swayFactor = smoothstep(0.1, 0.8, heightFromBottom);
 
-    // Dodajemy randomOffset do czasu (time), co rozbija synchronizację!
     float swayX = sin(time * 1.2 + randomOffset + worldPos.z * 0.5) * 0.02 * swayFactor;
     float swayZ = sin(time * 1.0 + randomOffset + worldPos.x * 0.5 + 1.0) * 0.015 * swayFactor;
 
     worldPos.x += swayX;
     worldPos.z += swayZ;
 
-    // 5. Przesuwamy wierzchołek
     worldPos.x += swayX;
     worldPos.z += swayZ;
 
-    // 6. Ustawiamy zmienne wyjściowe dla fragment shadera
     FragPos = vec3(worldPos);
     Normal = mat3(transpose(inverse(model))) * aNormal;
     TexCoords = aTexCoords;

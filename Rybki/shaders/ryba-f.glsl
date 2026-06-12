@@ -35,25 +35,22 @@ vec3 calculateChestGlow(vec3 normal, vec3 fragPos) {
 
 void main() {    
     vec4 texColor = texture(texture_diffuse1, TexCoords);
-    if(texColor.a < 0.1) discard; // Odrzucenie przezroczystych pikseli
+    if(texColor.a < 0.1) discard;
 
     vec3 norm = normalize(Normal);
     vec3 lightDir = normalize(spotLight.position - FragPos);
     
-    // Światło owijające się wokół ryby, żeby boki nie były czarne
     float diff = dot(norm, lightDir) * 0.5 + 0.5;
     
-    // Obliczenie krawędzi stożka (miękkie światło)
     float theta = dot(lightDir, normalize(-spotLight.direction)); 
     float epsilon = spotLight.cutOff - spotLight.outerCutOff;
     float intensity = clamp((theta - spotLight.outerCutOff) / epsilon, 0.0, 1.0);
     
-    // Tłumienie z odległością (attenuation)
     float distance = length(spotLight.position - FragPos);
     float attenuation = 1.0 / (spotLight.constant + spotLight.linear * distance + spotLight.quadratic * (distance * distance));    
 
     vec3 diffuse = spotLight.color * diff * intensity * attenuation;
-    vec3 ambient = vec3(0.2) * texColor.rgb; // Delikatne światło otoczenia
+    vec3 ambient = vec3(0.2) * texColor.rgb;
     
     vec3 result = ambient + (diffuse * texColor.rgb);
     
