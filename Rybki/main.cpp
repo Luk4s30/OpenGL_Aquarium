@@ -11,6 +11,9 @@
 #include <vector>
 #include <cstdlib>
 
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
 // STRUKTURY
 struct Boid {
     glm::vec3 position;
@@ -36,29 +39,28 @@ struct ChestLightUBO {
     float pad;
 };
 
-struct RoslinaPos { float x, z, skala, offset; };
-std::vector<RoslinaPos> rosliny = {
-    { -1.2f,  0.5f, 0.05f, 0.0f },
-    {  0.3f,  0.0f, 0.06f, 2.4f },
-    {  1.0f,  0.2f, 0.04f, 5.1f },
-    { -0.5f, -0.3f, 0.03f, 1.3f },
-};
-
-enum ObstacleType {
-    OBS_SPHERE,
-    OBS_CONE
-};
-
 struct Obstacle {
     glm::vec3 position;
     float radiusBottom;
     float radiusTop;
     float height;
-    ObstacleType type;
+    //ObstacleType type;
 };
 
+struct SimulationSettings {
+    int numBoids = 50;
+    float visualRange = 0.4f;
+    float protectedRange = 0.3f;
+    float maxSpeed = 0.6f;
+    float minSpeed = 0.2f;
+    float maxForce = 0.5f;
+    float separationWeight = 2.0f;
+    float alignmentWeight = 1.0f;
+    float cohesionWeight = 1.0f;
+    float avoidanceWeight = 3.0f;
+} simSettings;
+
 // ZMIENNE GLOBALNE
-const int NUM_BOIDS = 50;
 std::vector<Boid> stado;
 std::vector<Obstacle> przeszkody;
 
@@ -93,7 +95,7 @@ unsigned int cubemapTexture;
 // Bufory debug
 unsigned int debugLineVAO, debugLineVBO;
 unsigned int debugCircleVAO, debugCircleVBO;
-bool showDebug = true;
+bool showDebug = false;
 bool pKeyPressed = false;
 
 // DEKLARACJE FUNKCJI
@@ -105,7 +107,7 @@ unsigned int loadTexture2D(char const* path);
 
 // FUNKCJE INICJALIZUJĄCE 
 void initBoids() {
-    for (int i = 0; i < NUM_BOIDS; i++) {
+    for (int i = 0; i < simSettings.numBoids; i++) {
         Boid b;
         b.position = glm::vec3(
             ((rand() % 200) / 100.0f - 1.0f) * 1.5f,
@@ -124,33 +126,7 @@ void initBoids() {
 
 void initPrzeszkody() {
     przeszkody.clear();
-
-    przeszkody.push_back({ glm::vec3(1.6f, -1.0f, -0.65f), 0.25f, 0.25f, 0.0f, OBS_SPHERE });
-
-    float bazowaWysokosc = 20.0f;
-    float bazowyPromienLodygi = 1.0f;
-    float bazowyPromienKorony = 6.0f;
-    float lokalnePrzesuniecieX = -4.0f;
-    float lokalnePrzesuniecieZ = -4.0f;
-
-    float aktualnySpin = 0.0f;
-
-    for (const auto& r : rosliny) {
-        aktualnySpin += 0.5f;
-
-        float wysokosc = bazowaWysokosc * r.skala;
-        float promienLodygi = bazowyPromienLodygi * r.skala;
-        float promienKorony = bazowyPromienKorony * r.skala;
-
-        glm::mat4 lokalnaMacierz = glm::mat4(1.0f);
-        lokalnaMacierz = glm::translate(lokalnaMacierz, glm::vec3(r.x, -1.1f, r.z));
-        lokalnaMacierz = glm::rotate(lokalnaMacierz, aktualnySpin, glm::vec3(0.0f, -1.0f, 0.0f));
-        lokalnaMacierz = glm::scale(lokalnaMacierz, glm::vec3(r.skala));
-
-        glm::vec4 pozycjaLodygi = lokalnaMacierz * glm::vec4(lokalnePrzesuniecieX, 0.0f, lokalnePrzesuniecieZ, 1.0f);
-
-        przeszkody.push_back({ glm::vec3(pozycjaLodygi.x, pozycjaLodygi.y, pozycjaLodygi.z), promienLodygi, promienKorony, wysokosc, OBS_CONE });
-    }
+    przeszkody.push_back({ glm::vec3(1.6f, -1.0f, -0.65f), 0.25f, 0.25f, 0.0f });
 }
 
 void initDebug() {
@@ -365,19 +341,8 @@ glm::vec3 limitVector(glm::vec3 v, float max) {
 }
 
 void aktualizujBoids(float dt) {
-    float visualRange = 0.4f; //zasięg widzenia
-    float protectedRange = 0.3f; // utrzymywany dystans pomiędzy innymi
-    float maxSpeed = 0.6f;
-    float minSpeed = 0.2f;
-    float maxForce = 0.5f; // siła skętu
-
-    float separationWeight = 2.0f;
-    float alignmentWeight = 1.0f;
-    float cohesionWeight = 1.0f;
-    float avoidanceWeight = 3.0f;
-
-    float minX = -2.0f, maxX = 2.0f;
-    float minY = -1.0f, maxY = 0.8f;
+    float minX = -1.8f, maxX = 1.8f;
+    float minY = -0.9f, maxY = 0.7f;
     float minZ = -0.8f, maxZ = 0.8f;
     float wallMargin = 0.3f;
 
@@ -405,38 +370,11 @@ void aktualizujBoids(float dt) {
             float dist = 0.0f;
             float dangerRadius = 0.0f;
 
-            if (obs.type == OBS_SPHERE) {
-                dangerRadius = obs.radiusBottom + 0.15f;
-                dist = glm::distance(stado[i].position, obs.position);
+            dangerRadius = obs.radiusBottom + 0.15f;
+            dist = glm::distance(stado[i].position, obs.position);
 
-                if (dist < dangerRadius) {
-                    pushDir = stado[i].position - obs.position;
-                }
-            }
-            else if (obs.type == OBS_CONE) {
-
-                glm::vec3 p1 = obs.position;
-                float height = obs.height;
-                glm::vec3 axisDir(0.0f, 1.0f, 0.0f);
-
-                glm::vec3 w = stado[i].position - p1;
-                float u = glm::dot(w, axisDir);
-                float t = glm::clamp(u / height, 0.0f, 1.0f);
-                float currentRadius = obs.radiusBottom + t * (obs.radiusTop - obs.radiusBottom);
-                dangerRadius = currentRadius + 0.15f;
-
-                float clampedU = glm::clamp(u, 0.0f, height);
-                glm::vec3 closestPointOnAxis = p1 + clampedU * axisDir;
-                glm::vec3 outVector = stado[i].position - closestPointOnAxis;
-                dist = glm::length(outVector);
-
-                if (dist < dangerRadius && glm::length(outVector) > 0) {
-                    pushDir = outVector;
-                }
-                else {
-                    pushDir = glm::vec3(0.0f);
-                    dist = 999.0f;
-                }
+            if (dist < dangerRadius) {
+                pushDir = stado[i].position - obs.position;
             }
 
             if (dist < dangerRadius && glm::length(pushDir) > 0) {
@@ -452,12 +390,12 @@ void aktualizujBoids(float dt) {
 
             float dist = glm::distance(stado[i].position, stado[j].position);
 
-            if (dist < protectedRange) {
+            if (dist < simSettings.protectedRange) {
                 glm::vec3 diff = stado[i].position - stado[j].position;
                 if (dist > 0.0f) diff /= dist;
                 separation += diff;
             }
-            else if (dist < visualRange) {
+            else if (dist < simSettings.visualRange) {
                 alignment += stado[j].velocity;
                 cohesion += stado[j].position;
                 neighboringBoids++;
@@ -466,44 +404,44 @@ void aktualizujBoids(float dt) {
 
         if (neighboringBoids > 0) {
             alignment /= neighboringBoids;
-            alignment = glm::normalize(alignment) * maxSpeed;
+            alignment = glm::normalize(alignment) * simSettings.maxSpeed;
             alignment = alignment - stado[i].velocity;
 
             cohesion /= neighboringBoids;
             glm::vec3 desiredCohesion = cohesion - stado[i].position;
-            desiredCohesion = glm::normalize(desiredCohesion) * maxSpeed;
+            desiredCohesion = glm::normalize(desiredCohesion) * simSettings.maxSpeed;
             cohesion = desiredCohesion - stado[i].velocity;
         }
 
         if (glm::length(separation) > 0) {
-            separation = glm::normalize(separation) * maxSpeed;
+            separation = glm::normalize(separation) * simSettings.maxSpeed;
             separation = separation - stado[i].velocity;
         }
 
         if (glm::length(avoidance) > 0) {
-            avoidance = glm::normalize(avoidance) * maxSpeed;
+            avoidance = glm::normalize(avoidance) * simSettings.maxSpeed;
             avoidance = avoidance - stado[i].velocity;
         }
 
         // PRIORYTETY
         float currentAvoidanceMag = glm::length(avoidance);
-        acceleration += limitVector(avoidance * avoidanceWeight, maxForce);
+        acceleration += limitVector(avoidance * simSettings.avoidanceWeight, simSettings.maxForce);
 
         if (currentAvoidanceMag < 0.1f) {
-            acceleration += limitVector(separation * separationWeight, maxForce);
-            acceleration += limitVector(alignment * alignmentWeight, maxForce);
-            acceleration += limitVector(cohesion * cohesionWeight, maxForce);
+            acceleration += limitVector(separation * simSettings.separationWeight, simSettings.maxForce);
+            acceleration += limitVector(alignment * simSettings.alignmentWeight, simSettings.maxForce);
+            acceleration += limitVector(cohesion * simSettings.cohesionWeight, simSettings.maxForce);
         }
         else {
-            acceleration += limitVector(separation * (separationWeight * 0.5f), maxForce);
+            acceleration += limitVector(separation * (simSettings.separationWeight * 0.5f), simSettings.maxForce);
         }
 
-        // AKTUALIZACJA
+        // AKTUALIZACJA POZYCJI
         stado[i].velocity += acceleration * dt;
 
         float speed = glm::length(stado[i].velocity);
-        if (speed < minSpeed) stado[i].velocity = (stado[i].velocity / speed) * minSpeed;
-        if (speed > maxSpeed) stado[i].velocity = (stado[i].velocity / speed) * maxSpeed;
+        if (speed < simSettings.minSpeed) stado[i].velocity = (stado[i].velocity / speed) * simSettings.minSpeed;
+        if (speed > simSettings.maxSpeed) stado[i].velocity = (stado[i].velocity / speed) * simSettings.maxSpeed;
 
         stado[i].position += stado[i].velocity * dt;
 
@@ -544,62 +482,23 @@ void rysujDebug(Shader& shader) {
     shader.setVec4("baseColor", 0.0f, 1.0f, 0.0f, 1.0f);
 
     for (const auto& obs : przeszkody) {
-        if (obs.type == OBS_SPHERE) {
-            glBindVertexArray(debugCircleVAO);
+        glBindVertexArray(debugCircleVAO);
 
-            float r = obs.radiusBottom + 0.15f;
-            glm::mat4 model = baseModel;
-            model = glm::translate(model, obs.position);
-            model = glm::scale(model, glm::vec3(r));
+        float r = obs.radiusBottom + 0.15f;
+        glm::mat4 model = baseModel;
+        model = glm::translate(model, obs.position);
+        model = glm::scale(model, glm::vec3(r));
 
-            shader.setMat4("model", model);
-            glDrawArrays(GL_LINE_STRIP, 0, 17);
+        shader.setMat4("model", model);
+        glDrawArrays(GL_LINE_STRIP, 0, 17);
 
-            glm::mat4 modelXY = glm::rotate(model, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-            shader.setMat4("model", modelXY);
-            glDrawArrays(GL_LINE_STRIP, 0, 17);
+        glm::mat4 modelXY = glm::rotate(model, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+        shader.setMat4("model", modelXY);
+        glDrawArrays(GL_LINE_STRIP, 0, 17);
 
-            glm::mat4 modelYZ = glm::rotate(model, glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-            shader.setMat4("model", modelYZ);
-            glDrawArrays(GL_LINE_STRIP, 0, 17);
-        }
-        else if (obs.type == OBS_CONE) {
-            float rBot = obs.radiusBottom + 0.15f;
-            float rTop = obs.radiusTop + 0.15f;
-
-            glBindVertexArray(debugCircleVAO);
-
-            glm::mat4 modelBot = baseModel;
-            modelBot = glm::translate(modelBot, obs.position);
-            modelBot = glm::scale(modelBot, glm::vec3(rBot));
-            shader.setMat4("model", modelBot);
-            glDrawArrays(GL_LINE_STRIP, 0, 17);
-
-            glm::mat4 modelTop = baseModel;
-            modelTop = glm::translate(modelTop, obs.position + glm::vec3(0.0f, obs.height, 0.0f));
-            modelTop = glm::scale(modelTop, glm::vec3(rTop));
-            shader.setMat4("model", modelTop);
-            glDrawArrays(GL_LINE_STRIP, 0, 17);
-
-            glBindVertexArray(debugLineVAO); 
-
-            int numLines = 8;
-            for (int i = 0; i < numLines; i++) {
-                float angle = i * 2.0f * 3.14159265f / numLines;
-                float cx = cos(angle);
-                float cz = sin(angle);
-
-                glm::vec3 pBot = obs.position + glm::vec3(cx * rBot, 0.0f, cz * rBot);
-                glm::vec3 pTop = obs.position + glm::vec3(cx * rTop, obs.height, cz * rTop);
-
-                float lineData[6] = { pBot.x, pBot.y, pBot.z, pTop.x, pTop.y, pTop.z };
-                glBindBuffer(GL_ARRAY_BUFFER, debugLineVBO);
-                glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(lineData), lineData);
-
-                shader.setMat4("model", baseModel);
-                glDrawArrays(GL_LINES, 0, 2);
-            }
-        }
+        glm::mat4 modelYZ = glm::rotate(model, glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        shader.setMat4("model", modelYZ);
+        glDrawArrays(GL_LINE_STRIP, 0, 17);
     }
 
     glEnable(GL_DEPTH_TEST);
@@ -622,6 +521,13 @@ int main() {
 
     if (glewInit() != GLEW_OK) return -1;
     glEnable(GL_DEPTH_TEST);
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    ImGui::StyleColorsDark();
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init("#version 330");
 
     Shader mainShader("shaders/norm-v.glsl", "shaders/norm-f.glsl");
     Shader modelShader("shaders/ryba-v.glsl", "shaders/ryba-f.glsl");
@@ -717,6 +623,40 @@ int main() {
 
         aktualizujBoids(deltaTime);
         processInput(window);
+
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
+        if (showDebug) {
+            ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
+            ImGui::Begin("Debug: Symulacja Boids", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+
+            ImGui::Text("Ustawienia stada");
+            ImGui::Separator();
+
+            ImGui::SliderInt("Ilosc rybek", &simSettings.numBoids, 1, 300);
+            ImGui::SliderFloat("Zasieg widzenia", &simSettings.visualRange, 0.1f, 2.0f);
+            ImGui::SliderFloat("Dystans chroniony", &simSettings.protectedRange, 0.05f, 1.0f);
+            ImGui::SliderFloat("Min Predkosc", &simSettings.minSpeed, 0.1f, 1.0f);
+            ImGui::SliderFloat("Max Predkosc", &simSettings.maxSpeed, 0.5f, 3.0f);
+            ImGui::SliderFloat("Max Sila Skretu", &simSettings.maxForce, 0.1f, 2.0f);
+
+            ImGui::Text("Wagi Priorytetow");
+            ImGui::Separator();
+            ImGui::SliderFloat("Separacja", &simSettings.separationWeight, 0.0f, 5.0f);
+            ImGui::SliderFloat("Wyrownanie (Alignment)", &simSettings.alignmentWeight, 0.0f, 5.0f);
+            ImGui::SliderFloat("Spojnosc (Cohesion)", &simSettings.cohesionWeight, 0.0f, 5.0f);
+            ImGui::SliderFloat("Unikanie scian", &simSettings.avoidanceWeight, 0.0f, 5.0f);
+
+            ImGui::Spacing();
+            if (ImGui::Button("Zastosuj i Resetuj Stado", ImVec2(-1, 30))) {
+                stado.clear();
+                initBoids();
+            }
+
+            ImGui::End();
+        }
 
         lightPos.x = lightRadius * cos(glm::radians(lightPitch)) * cos(glm::radians(lightYaw));
         lightPos.y = lightRadius * sin(glm::radians(lightPitch));
@@ -915,9 +855,16 @@ int main() {
         szybaShader.setMat4("view", view);
         rysujDebug(szybaShader);
 
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
+
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
 
     glDeleteVertexArrays(1, &kwadratVAO);
     glDeleteBuffers(1, &kwadratVBO);
@@ -1000,15 +947,17 @@ void processInput(GLFWwindow* window) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
 
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) camera.ProcessKeyboard(0, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) camera.ProcessKeyboard(1, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) camera.ProcessKeyboard(2, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) camera.ProcessKeyboard(3, deltaTime);
+    if (!showDebug) {
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) camera.ProcessKeyboard(0, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) camera.ProcessKeyboard(1, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) camera.ProcessKeyboard(2, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) camera.ProcessKeyboard(3, deltaTime);
 
-    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)    lightPitch += lightSpeed * deltaTime;
-    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)  lightPitch -= lightSpeed * deltaTime;
-    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)  lightYaw -= lightSpeed * deltaTime;
-    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) lightYaw += lightSpeed * deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)    lightPitch += lightSpeed * deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)  lightPitch -= lightSpeed * deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)  lightYaw -= lightSpeed * deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) lightYaw += lightSpeed * deltaTime;
+    }
 
     if (lightPitch > 89.0f) lightPitch = 89.0f;
     if (lightPitch < 5.0f) lightPitch = 5.0f;
@@ -1017,6 +966,14 @@ void processInput(GLFWwindow* window) {
         if (!pKeyPressed) {
             showDebug = !showDebug;
             pKeyPressed = true;
+
+            if (showDebug) {
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            }
+            else {
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                firstMouse = true;
+            }
         }
     }
     else {
@@ -1025,6 +982,8 @@ void processInput(GLFWwindow* window) {
 }
 
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
+    if (showDebug) return;
+    
     float xpos = static_cast<float>(xposIn);
     float ypos = static_cast<float>(yposIn);
 
